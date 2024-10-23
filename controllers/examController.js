@@ -27,16 +27,11 @@ export const getExams = async (req, res) => {
             };
     }
 
-    // if (type && role === "student") {
-    //   filterObj.endDate =
-    //     type === "notHeld"
-    //       ? {
-    //           $gt: currentDate,
-    //         }
-    //       : {
-    //           $lte: currentDate,
-    //         };
-    // }
+    if (role === "student") {
+      filterObj.endDate = {
+        $gt: currentDate,
+      };
+    }
 
     if (searchQuery && searchQuery.trim() !== "") {
       const regexSearchQuery = new RegExp(searchQuery, "i");
@@ -89,7 +84,43 @@ export const getQuestions = async (req, res) => {
   }
 };
 
-export const getExamResults = async (req, res) => {
+export const getExamResultsByStudent = async (req, res) => {
+  const { id } = req.user;
+
+  try {
+    const currentDate = new Date();
+    const exams = await Exam.find({
+      students: id,
+      endDate: { $lt: currentDate },
+    });
+
+    const results = await Promise.all(
+      exams.map(async (exam) => {
+        let correctCount = await Question.countDocuments({
+          studentId: id,
+          exam: exam._id,
+          options: {
+            $elemMatch: {
+              isCorrect: true,
+              isCorrectByStudent: true,
+            },
+          },
+        });
+
+        return {
+          examName: exam.name,
+          correctCount,
+        };
+      })
+    );
+
+    res.status(200).json(results);
+  } catch (err) {
+    res.status(500).json({ message: { error: err.message } });
+  }
+};
+
+export const getExamResultsByExam = async (req, res) => {
   const { id } = req.params;
   try {
     const exam = await Exam.findById(id).populate("students");
@@ -167,7 +198,9 @@ export const createExam = async (req, res) => {
     await newExam.save();
     await newExam.populate("students");
     console.log(newExam);
-    res.status(201).json({ ...newExam.toObject(), date: newExam.startDate });
+    res
+      .status(201)
+      .json({ ...newExam.toObject(), date: newExam.startDate, active: true });
   } catch (err) {
     res.status(500).json({ error: { message: err.message } });
   }

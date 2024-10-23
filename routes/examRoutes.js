@@ -4,6 +4,8 @@ import {
   createQuestion,
   deleteExam,
   deleteQuestion,
+  getExamResultsByExam,
+  getExamResultsByStudent,
   getExams,
   getQuestions,
   updateExam,
@@ -30,5 +32,9 @@ router.patch(
   updateQuestionByStudent
 );
 router.delete("/question/:id", authMiddleware, deleteQuestion);
+
+// results
+router.get("/results/by-student", authMiddleware, getExamResultsByStudent);
+router.get("/results/by-exam/:id", authMiddleware, getExamResultsByExam);
 
 export default router;
