@@ -114,23 +114,18 @@ export const getStudents = async (req, res) => {
 
 // Get active students
 export const getActiveStudents = async (req, res) => {
-  const { studentsCount, searchQuery, courseId } = req.query;
+  const { studentsCount, searchQuery } = req.query;
   try {
     const regexSearchQuery = new RegExp(searchQuery?.trim() || "", "i");
 
     const students = await Student.find({
       fullName: { $regex: regexSearchQuery },
       deleted: false,
-      courses: { $in: courseId },
-    })
-      .select("-password")
-      .skip(parseInt(studentsCount || 0))
-      .limit(parseInt(studentsCount || 0) + 30);
+    }).select("-password");
 
     const totalLength = await Student.countDocuments({
       fullName: { $regex: regexSearchQuery },
       deleted: false,
-      courses: { $in: courseId },
     });
 
     res.status(200).json({ students, totalLength });

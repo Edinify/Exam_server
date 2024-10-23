@@ -8,7 +8,11 @@ export const examSchema = new Schema(
       type: String,
       required: true,
     },
-    date: {
+    startDate: {
+      type: Date,
+      required: true,
+    },
+    endDate: {
       type: Date,
       required: true,
     },
@@ -20,21 +24,21 @@ export const examSchema = new Schema(
       type: String,
       required: true,
     },
-    course: {
-      type: Schema.Types.ObjectId,
-      ref: "Course",
-      required: true,
-    },
+    // course: {
+    //   type: Schema.Types.ObjectId,
+    //   ref: "Course",
+    //   required: true,
+    // },
     students: [
       {
         type: Schema.Types.ObjectId,
         ref: "Student",
       },
     ],
-    teacher: {
-      type: Schema.Types.ObjectId,
-      ref: "Teacher",
-    },
+    // teacher: {
+    //   type: Schema.Types.ObjectId,
+    //   ref: "Teacher",
+    // },
   },
   { timestamps: true }
 );

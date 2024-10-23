@@ -1,5 +1,6 @@
 import { Exam } from "../models/examModel.js";
 import { Question } from "../models/questionModel.js";
+import moment from "moment-timezone";
 
 // GET
 export const getExams = async (req, res) => {
@@ -8,24 +9,34 @@ export const getExams = async (req, res) => {
   const limit = 20;
 
   try {
+    const currentDate = new Date();
     const filterObj = {};
 
     if (role === "teacher") filterObj.teacher = id;
 
     if (role === "student") filterObj.students = id;
 
-    if (type) {
-      const currentDate = new Date();
-
-      filterObj.date =
+    if (type && role === "super-admin") {
+      filterObj.startDate =
         type === "notHeld"
           ? {
               $gt: currentDate,
             }
           : {
-              $lt: currentDate,
+              $lte: currentDate,
             };
     }
+
+    // if (type && role === "student") {
+    //   filterObj.endDate =
+    //     type === "notHeld"
+    //       ? {
+    //           $gt: currentDate,
+    //         }
+    //       : {
+    //           $lte: currentDate,
+    //         };
+    // }
 
     if (searchQuery && searchQuery.trim() !== "") {
       const regexSearchQuery = new RegExp(searchQuery, "i");
@@ -38,9 +49,22 @@ export const getExams = async (req, res) => {
     const exams = await Exam.find(filterObj)
       .skip(length || 0)
       .limit(limit)
-      .populate("teacher students course");
+      .populate("students");
 
-    res.status(200).json({ exams, totalLength });
+    let result = exams.map((exam) => ({
+      ...exam.toObject(),
+      date: exam.startDate,
+      active: true,
+    }));
+
+    if (role === "student") {
+      result = result.map((item) => ({
+        ...item,
+        active: currentDate >= item.startDate && currentDate <= item.endDate,
+      }));
+    }
+
+    res.status(200).json({ exams: result, totalLength });
   } catch (err) {
     res.status(500).json({ message: { error: err.message } });
   }
@@ -52,14 +76,10 @@ export const getQuestions = async (req, res) => {
 
   console.log(req.user, "current user");
   try {
-    let questions = await Question.find({ exam: examId });
+    let questions = await Question.find({ exam: examId, role: "main" });
 
     if (role === "student") {
-      questions = questions.map((question) => ({
-        ...question.toObject(),
-        studentAnswer:
-          question.answers.find((item) => item.student.toString() === id) || "",
-      }));
+      questions = await Question.find({ exam: examId, studentId: id });
     }
 
     console.log(questions);
@@ -119,19 +139,57 @@ export const getExamResults = async (req, res) => {
 // CREATE
 export const createExam = async (req, res) => {
   try {
-    const newExam = new Exam(req.body);
-    await newExam.save();
+    const { name, date, startTime, endTime, students } = req.body;
+    const timeZone = "Asia/Baku";
 
-    res.status(201).json(newExam);
+    console.log(req.body);
+    // Start və End tarixləri üçün saatları əlavə edirik
+    const fullStartDate = moment
+      .tz(`${date} ${startTime}`, "YYYY-MM-DD HH:mm", timeZone)
+      .toDate();
+
+    const fullEndDate = moment
+      .tz(`${date} ${endTime}`, "YYYY-MM-DD HH:mm", timeZone)
+      .toDate();
+
+    fullStartDate.setDate(fullStartDate.getDate() + 1);
+    fullEndDate.setDate(fullEndDate.getDate() + 1);
+
+    const newExam = new Exam({
+      name,
+      startDate: fullStartDate,
+      endDate: fullEndDate,
+      startTime,
+      endTime,
+      students,
+    });
+
+    await newExam.save();
+    await newExam.populate("students");
+    console.log(newExam);
+    res.status(201).json({ ...newExam.toObject(), date: newExam.startDate });
   } catch (err) {
     res.status(500).json({ error: { message: err.message } });
   }
 };
 
 export const createQuestion = async (req, res) => {
+  console.log(req.body);
   try {
-    const newQuestion = new Question(req.body);
+    const newQuestion = new Question({ ...req.body, role: "main" });
     await newQuestion.save();
+
+    const exam = await Exam.findById(newQuestion.exam);
+
+    const questionsForStudents = exam.students.map((studentId) => ({
+      exam: exam._id,
+      text: newQuestion.text,
+      options: newQuestion.options,
+      studentId: studentId,
+      role: "current",
+    }));
+
+    await Question.insertMany(questionsForStudents);
 
     res.status(201).json(newQuestion);
   } catch (err) {
@@ -142,16 +200,23 @@ export const createQuestion = async (req, res) => {
 // UPDATE
 export const updateExam = async (req, res) => {
   const { id } = req.params;
+  const { name, students } = req.body;
   try {
-    const updatedExam = await Exam.findByIdAndUpdate(id, req.body, {
-      new: true,
-    });
+    const updatedExam = await Exam.findByIdAndUpdate(
+      id,
+      { name, students },
+      {
+        new: true,
+      }
+    ).populate("students");
 
     if (!updatedExam) {
       return res.status(404).json({ message: "Exam not found" });
     }
 
-    res.status(200).json(updatedExam);
+    res
+      .status(200)
+      .json({ ...updatedExam.toObject(), date: updatedExam.startDate });
   } catch (err) {
     res.status(500).json({ error: { message: err.message } });
   }
@@ -159,6 +224,8 @@ export const updateExam = async (req, res) => {
 
 export const updateQuestion = async (req, res) => {
   const { id } = req.params;
+  const { role } = req.user;
+
   try {
     const updatedQuestion = await Question.findByIdAndUpdate(id, req.body, {
       new: true,
@@ -166,6 +233,13 @@ export const updateQuestion = async (req, res) => {
 
     if (!updatedQuestion) {
       return res.status(404).json({ message: "Question not found" });
+    }
+
+    if (role === "super-admin") {
+      await Question.updateMany(
+        { exam: updatedQuestion.exam, role: "current" },
+        { text: updatedQuestion.text, options: updatedQuestion.options }
+      );
     }
 
     res.status(200).json(updatedQuestion);

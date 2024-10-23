@@ -8,6 +8,9 @@ export const questionSchema = new Schema(
       type: Schema.Types.ObjectId,
       required: true,
     },
+    role: {
+      type: String,
+    },
     text: {
       type: String,
       required: true,
@@ -24,27 +27,33 @@ export const questionSchema = new Schema(
         isCorrect: {
           type: Boolean,
         },
-      },
-    ],
-
-    answers: [
-      {
-        student: {
-          type: Schema.Types.ObjectId,
-          ref: "Student",
-        },
-        answer: {
-          type: String,
-          enum: ["A", "B", "C", "D", "E", "F"],
-        },
-        text: {
-          type: String,
-        },
-        isCorrect: {
+        isCorrectByStudent: {
           type: Boolean,
         },
       },
     ],
+    studentId: {
+      type: Schema.Types.ObjectId,
+    },
+
+    // answers: [
+    //   {
+    //     student: {
+    //       type: Schema.Types.ObjectId,
+    //       ref: "Student",
+    //     },
+    //     answer: {
+    //       type: String,
+    //       enum: ["A", "B", "C", "D", "E", "F"],
+    //     },
+    //     text: {
+    //       type: String,
+    //     },
+    //     isCorrect: {
+    //       type: Boolean,
+    //     },
+    //   },
+    // ],
   },
   { timestamps: true }
 );
