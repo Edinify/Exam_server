@@ -128,40 +128,34 @@ export const getExamResultsByExam = async (req, res) => {
     if (!exam) {
       return res.status(404).json({ message: "Exam not found" });
     }
-    const questions = await Question.find({ exam: id });
 
-    const results = exam.students.map((student) => {
-      let correctCount = 0;
-      let incorrectCount = 0;
-      let unansweredCount = 0;
+    const results = await Promise.all(
+      exam.students.map(async (student) => {
+        let correctCount = await Question.countDocuments({
+          exam: exam._id,
+          studentId: student._id,
+          options: {
+            $elemMatch: {
+              isCorrect: true,
+              isCorrectByStudent: true,
+            },
+          },
+        });
 
-      // 4. Hər bir sual üzrə tələbənin cavabını yoxla
-      questions.forEach((question) => {
-        const studentAnswer = question.answers.find(
-          (answer) => answer.student.toString() === student._id.toString()
-        );
+        let questionsCount = await Question.countDocuments({
+          exam: exam._id,
+          studentId: student._id,
+        });
 
-        if (studentAnswer) {
-          if (studentAnswer.isCorrect) {
-            correctCount += 1;
-          } else {
-            incorrectCount += 1;
-          }
-        } else {
-          unansweredCount += 1;
-        }
-      });
+        return {
+          studentName: student.fullName,
+          questionsCount,
+          correctCount,
+        };
+      })
+    );
 
-      return {
-        student: student,
-        totalQuestions: questions.length,
-        correctAnswers: correctCount,
-        incorrectAnswers: incorrectCount,
-        unansweredQuestions: unansweredCount,
-      };
-    });
-
-    res.status(200).json(questions);
+    res.status(200).json({ currentExam: exam, results });
   } catch (err) {
     res.status(500).json({ message: { error: err.message } });
   }
